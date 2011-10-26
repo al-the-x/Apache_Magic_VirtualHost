@@ -1,0 +1,118 @@
+###
+ # This is a "magic" <VirtualHost> definition that I use on all my Apache servers
+ # so that I don't have to create individual <VirtualHost> definition for every
+ # project or deployment. It handles the following scenarios:
+ #
+ #   hostname            location served                 response if missing
+ #   ==================  ======================          ==========================
+ #   127.0.0.1 (any IP)  /var/www/htdocs/pub/            403 Forbidden
+ #   example.com/        /var/www/example.com/pub/       302 Found: http://www.example.com/
+ #   www.example.com/    /var/www/www.example.com/pub/
+ #                       /var/www/example.com/www/pub/   404 Missing
+ #   a.b.example.com/    /var/www/a.b.example.com/pub/
+ #                       /var/www/example.com/a.b/pub/   404 Missing
+ #
+ # If you'd like more depth than that, see the "Dynamically Configured Mass Virtual Hosting"
+ # tutorial at http://httpd.apache.org/docs/2.0/vhosts/mass.html
+ ##
+<VirtualHost *:80>
+## TODO: One day, figure out how to set this dynamically...
+##	ServerAdmin webmaster@localhost
+
+	LogLevel warn
+	# OR: debug, info, notice, warn, error, crit, alert, emerg
+
+	ErrorLog ${APACHE_LOG_DIR}/error.log
+
+	CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+    ## Set to the usual place...
+	DocumentRoot /var/www
+    <IfModule rewrite_module>
+        RewriteEngine On
+
+        ## Only enabled for debugging purposes...
+        #RewriteLog ${APACHE_LOG_DIR}/rewrite.log
+        #RewriteLogLevel 9
+
+        ###
+         # If the requested HTTP_HOST is just an IPv4 address, serve out of the
+         # "htdocs" directory. It's probably a proxy request.
+         ##
+        RewriteCond %{HTTP_HOST} \d{1,3}(?:\.\d{1,3}){3}
+        RewriteRule ^/?(.*)$ %{DOCUMENT_ROOT}/htdocs/pub/$1 [L,QSA]
+
+        ###
+         # If the requested HTTP_HOST has a matching directory in the filesystem
+         # with a "pub" subdirectory, then rewrite the DOCUMENT_ROOT to there.
+         # This catches fully qualified subdomains AND top-level domains that must
+         # be served without a subdomain.
+         ##
+        RewriteCond /var/www/%{HTTP_HOST}/pub/ -d
+        RewriteRule ^/?(.*)$ %{DOCUMENT_ROOT}/%{HTTP_HOST}/pub/$1 [L,QSA]
+
+        ###
+         # If the requested HTTP_HOST does not have a matching directory and at least
+         # one subdomain, prepend "www" to it and redirect, enforcing a canonical subdomain.
+         ##
+        RewriteCond %{HTTP_HOST} ![a-z0-9-]+\.([a-z0-9-]+\.[a-z]+)$ [NC]
+        RewriteRule ^/?(.*)$ http://www.%{HTTP_HOST}/$1 [R=302,L]
+
+        ###
+         # If the requested HTTP_HOST has at least one subdomain AND maps to a filesystem
+         # location under the first-level domain, then rewrite the DOCUMENT_ROOT to there.
+         ##
+        RewriteCond %{HTTP_HOST} ^((?:[a-z0-9-]+\.)*[a-z0-9-]+)\.([a-z0-9-]+\.[a-z]+)$ [NC]
+        RewriteCond /var/www/%2/%1/pub/ -d
+        RewriteRule ^/?(.*)$ %{DOCUMENT_ROOT}/%2/%1/pub/$1 [L,QSA]
+    </IfModule>
+
+   ###
+    # Only requests from "localhost" or an equivalent are permitted to use the
+    # IP address directly for security purposes. I usually put proxy scripts there.
+    ##
+	<Directory "/var/www/">
+		Options +Indexes +MultiViews +FollowSymLinks
+
+        ## So that .htaccess files above "pub/" are parsed...
+		AllowOverride All
+
+		Order deny,allow
+		Deny from all
+        Allow from 127.0.0.1/255.0.0.0 ::1/128
+	</Directory>
+
+    ###
+     # Any "pub/" directory one or two layers into ${DOCUMENT_ROOT} will be
+     # publicly available.
+     ##
+    <DirectoryMatch "/var/www/[^/]+/(?:[^/]+/)?pub/">
+        Options -Indexes -MultiViews
+        Order allow,deny
+        Allow from all
+    </DirectoryMatch>
+
+    ###
+     # Honestly, I rarely use the global "cgi-bin" dir anymore, but if I did it
+     # would need these permissions.
+     ##
+	ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+	<Directory "/usr/lib/cgi-bin">
+		AllowOverride None
+		Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+		Order allow,deny
+		Allow from all
+	</Directory>
+
+    ###
+     # Another standard Apache configuration: allowing local access to the docs.
+     ##
+    Alias /doc/ "/usr/share/doc/"
+    <Directory "/usr/share/doc/">
+        Options Indexes MultiViews FollowSymLinks
+        AllowOverride None
+        Order deny,allow
+        Deny from all
+        Allow from 127.0.0.0/255.0.0.0 ::1/128
+    </Directory>
+</VirtualHost>
