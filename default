@@ -61,8 +61,14 @@
         ###
          # If the requested HTTP_HOST has at least one subdomain AND maps to a filesystem
          # location under the first-level domain, then rewrite the DOCUMENT_ROOT to there.
+         # This regex is REALLY complex, so lemme break it down for Future Me:
+         #     ^((?:[a-z0-9-]+\.)*?[a-z0-9-]+) -- "*?" is non-greedy repeat
+         #       Making $1 not-greedy ensures we grab "a" from "a.b.example.com" and match
+         #       "/var/www/b.example.com/a/pub/" if it exists.
+         #
+         # TODO: Test that this still matches "/var/www/a.b.example.com/pub/" FIRST...
          ##
-        RewriteCond %{HTTP_HOST} ^((?:[a-z0-9-]+\.)*[a-z0-9-]+)\.([a-z0-9-]+\.[a-z]+)$ [NC]
+        RewriteCond %{HTTP_HOST} ^((?:[a-z0-9-]+\.)*?[a-z0-9-]+)\.((?:[a-z0-9-]+\.)*[a-z0-9-]+\.[a-z]+)$ [NC]
         RewriteCond /var/www/%2/%1/pub/ -d
         RewriteRule ^/?(.*)$ %{DOCUMENT_ROOT}/%2/%1/pub/$1 [L,QSA]
     </IfModule>
